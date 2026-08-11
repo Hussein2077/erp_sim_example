@@ -176,6 +176,111 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.17.0"
+  module_01:
+    dependency: "direct dev"
+    description:
+      path: "packages/module_01"
+      relative: true
+    source: path
+    version: "1.0.0"
+  module_02:
+    dependency: "direct dev"
+    description:
+      path: "packages/module_02"
+      relative: true
+    source: path
+    version: "1.0.0"
+  module_03:
+    dependency: "direct dev"
+    description:
+      path: "packages/module_03"
+      relative: true
+    source: path
+    version: "1.0.0"
+  module_04:
+    dependency: "direct dev"
+    description:
+      path: "packages/module_04"
+      relative: true
+    source: path
+    version: "1.0.0"
+  module_05:
+    dependency: "direct dev"
+    description:
+      path: "packages/module_05"
+      relative: true
+    source: path
+    version: "1.0.0"
+  module_06:
+    dependency: "direct dev"
+    description:
+      path: "packages/module_06"
+      relative: true
+    source: path
+    version: "1.0.0"
+  module_07:
+    dependency: "direct dev"
+    description:
+      path: "packages/module_07"
+      relative: true
+    source: path
+    version: "1.0.0"
+  module_08:
+    dependency: "direct dev"
+    description:
+      path: "packages/module_08"
+      relative: true
+    source: path
+    version: "1.0.0"
+  module_09:
+    dependency: "direct dev"
+    description:
+      path: "packages/module_09"
+      relative: true
+    source: path
+    version: "1.0.0"
+  module_10:
+    dependency: "direct dev"
+    description:
+      path: "packages/module_10"
+      relative: true
+    source: path
+    version: "1.0.0"
+  module_11:
+    dependency: "direct dev"
+    description:
+      path: "packages/module_11"
+      relative: true
+    source: path
+    version: "1.0.0"
+  module_12:
+    dependency: "direct dev"
+    description:
+      path: "packages/module_12"
+      relative: true
+    source: path
+    version: "1.0.0"
+  module_13:
+    dependency: "direct dev"
+    description:
+      path: "packages/module_13"
+      relative: true
+    source: path
+    version: "1.0.0"
+  module_14:
+    dependency: "direct dev"
+    description:
+      path: "packages/module_14"
+      relative: true
+    source: path
+    version: "1.0.0"
+  module_15:
+    dependency: "direct dev"
+    description:
+      path: "packages/module_15"
+      relative: true
+    source: path
+    version: "1.0.0"
   nested:
     dependency: transitive
     description:

@@ -21,6 +21,36 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  module_01:
+    path: packages/module_01
+  module_02:
+    path: packages/module_02
+  module_03:
+    path: packages/module_03
+  module_04:
+    path: packages/module_04
+  module_05:
+    path: packages/module_05
+  module_06:
+    path: packages/module_06
+  module_07:
+    path: packages/module_07
+  module_08:
+    path: packages/module_08
+  module_09:
+    path: packages/module_09
+  module_10:
+    path: packages/module_10
+  module_11:
+    path: packages/module_11
+  module_12:
+    path: packages/module_12
+  module_13:
+    path: packages/module_13
+  module_14:
+    path: packages/module_14
+  module_15:
+    path: packages/module_15
 
 flutter:
   uses-material-design: true

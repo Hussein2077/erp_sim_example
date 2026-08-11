@@ -395,10 +395,7 @@ export 'package:reactive_forms/reactive_forms.dart';
     _write('lib/features/common_feature/presentation/controllers/events/feature_event.dart', '''
 import 'package:equatable/equatable.dart';
 
-export 'core/reactive_form_session_event.dart';
-${units.map((u) => "export '${eventDir(u).split('/').last}/$u\_event.dart';").join('\n')}
-
-sealed class FeatureEvent extends Equatable {
+abstract class FeatureEvent extends Equatable {
   const FeatureEvent();
   @override
   List<Object?> get props => [];
@@ -540,8 +537,7 @@ abstract class FeatureCapability {
     buf.writeln('  }');
     buf.writeln();
 
-    buf.writeln('  @override');
-    buf.writeln('  SubState<${toPascal(unit)}Ent>? get ${camel}OnLoadState => _store.state.props.${camel}OnLoadState;');
+    buf.writeln('  SubState<${toPascal(unit)}Ent>? get ${camel}OnLoadState => _store.state.stateProps.${camel}OnLoadState;');
 
     for (var m = 0; m < config.methods; m++) {
       if (m == 0) {
@@ -585,7 +581,7 @@ abstract class FeatureCapability {
 
     final ctorParams = units.map((u) {
       final camel = toCamel(u);
-      return '    required this.${camel}OnLoadState,';
+      return '    this.${camel}OnLoadState,';
     }).join('\n');
 
     final copyParams = units.map((u) {
@@ -683,8 +679,12 @@ abstract class FeatureBlocBase<T extends FeatureState> extends Bloc<FeatureEvent
   }
 
   String _featureContractBloc() {
-    final contracts = units.map((u) => '    ${mixinContractName(u)},').join('\n');
+    final contracts = joinIndented(
+      units.map((u) => mixinContractName(u)).toList(),
+      indent: '    ',
+    );
     return '''
+import '../../../domain/use_cases/feature_use_cases.dart';
 import '../state/feature_state.dart';
 ${units.map((u) => "import '../${mixinDir(u)}/${u}_mixin.dart';").join('\n')}
 
@@ -698,10 +698,11 @@ $contracts {
   }
 
   String _featureBloc() {
-    final withClause = units.map((u) {
-      if (nonGenericMixins.contains(u)) return '        ${mixinClassName(u)},';
-      return '        ${mixinClassName(u)}<T>,';
-    }).join('\n');
+    final mixinLines = units.map((u) {
+      if (nonGenericMixins.contains(u)) return mixinClassName(u);
+      return '${mixinClassName(u)}<T>';
+    }).toList();
+    final withClause = joinIndented(mixinLines);
 
     final registrations = units.map((u) => '    register${toPascal(u)}MixinHandlers();').join('\n');
 
@@ -718,10 +719,10 @@ class FeatureBloc<T extends FeatureState> extends FeatureBlocBase<T>
 $withClause
     implements IFeatureBloc<T> {
   FeatureBloc({
-    required super.featureUseCases,
-    required super.screenId,
+    required FeatureUseCases featureUseCases,
+    required String screenId,
     required T initialState,
-  }) : super(initialState) {
+  }) : super(initialState, featureUseCases: featureUseCases, screenId: screenId) {
     registerFeatureEventHandlers();
   }
 
@@ -858,10 +859,10 @@ ${units.map((u) => '  ${capabilityClassName(u)} get ${toCamel(u)}Capability => _
 
     return '''
 import 'package:erp_scale_sim/core/injection/get_it.dart';
-import '../../domain/use_cases/feature_use_cases.dart';
-${units.map((u) => "import '../../domain/use_cases/$u\_use_case.dart';").join('\n')}
-import '../../data/datasources/feature_remote_data_source.dart';
-import '../../data/repos/feature_repo.dart';
+import '../domain/use_cases/feature_use_cases.dart';
+${units.map((u) => "import '../domain/use_cases/$u\_use_case.dart';").join('\n')}
+import '../data/datasources/feature_remote_data_source.dart';
+import '../data/repos/feature_repo.dart';
 
 class CommonFeatureInjection {
   static bool _registered = false;
@@ -894,7 +895,7 @@ class CommonFeatureDef {
   String _commonFeatureView() {
     return '''
 import 'package:erp_scale_sim/core/src/common_app_export.dart';
-import 'widgets/feature_scaffold.dart';
+import '../view/widgets/feature_scaffold.dart';
 
 class CommonFeatureView extends StatelessWidget {
   const CommonFeatureView({super.key, required this.title, required this.child});

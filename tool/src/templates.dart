@@ -10,6 +10,7 @@ String generateMixinFile(GenConfig config, String unit, int index, List<String> 
   final camel = toCamel(unit);
   final isGeneric = !nonGenericMixins.contains(unit);
   final typeParam = isGeneric ? '<T extends FeatureState>' : '';
+  final stateType = isGeneric ? 'T' : 'FeatureState';
   final onClause = _mixinOnClause(config, unit, index, units, isGeneric);
   final implements = _crossImplements(config, unit, index, units);
 
@@ -17,9 +18,23 @@ String generateMixinFile(GenConfig config, String unit, int index, List<String> 
   buf.writeln("import 'dart:async';");
   buf.writeln("import 'package:erp_scale_sim/core/src/common_app_export.dart';");
   buf.writeln("import '../../bloc/feature_bloc_base.dart';");
-  buf.writeln("import '../../../domain/use_cases/${unit}_use_case.dart';");
-  if (isGeneric) {
-    buf.writeln("import 'reactive_form_session_mixin.dart';");
+  buf.writeln("import '../../state/feature_state.dart';");
+  buf.writeln("import '../../events/feature_event.dart';");
+  buf.writeln("import '../../../../domain/entities/${unit}_ent.dart';");
+  buf.writeln("import '../../../../domain/use_cases/${unit}_use_case.dart';");
+  if (isGeneric && unit != 'reactive_form_session') {
+    final relPath = isCoreMixin(unit) ? '' : '../core/';
+    buf.writeln("import '${relPath}reactive_form_session_mixin.dart';");
+  }
+  if (config.cross > 0 && index != 0 && index % config.cross == 0) {
+    final sibling = units[(index + 1) % units.length];
+    final siblingDir = isCoreMixin(sibling) ? 'core' : 'operations';
+    buf.writeln("import '../$siblingDir/${sibling}_mixin.dart';");
+  }
+  if (config.chain > 0 && index != 0 && index % config.chain == 0) {
+    final prev = units[index - 1];
+    final prevDir = isCoreMixin(prev) ? 'core' : 'operations';
+    buf.writeln("import '../$prevDir/${prev}_mixin.dart';");
   }
   buf.writeln("import '../../events/${eventDir(unit).split('/').last}/$unit\_event.dart';");
   buf.writeln();
@@ -129,15 +144,15 @@ String generateMixinFile(GenConfig config, String unit, int index, List<String> 
                     : 'Op$m';
     buf.writeln('  Future<void> _handle${toPascal(unit)}$opName(');
     buf.writeln('    ${toPascal(unit)}${opName}Event event,');
-    buf.writeln('    Emitter<T> emit,');
+    buf.writeln('    Emitter<$stateType> emit,');
     buf.writeln('  ) async {');
     buf.writeln('    _${camel}State.loadCount++;');
     buf.writeln('    emit(state.copyWith(');
     buf.writeln('      loaderStatus: LoaderStatus.loading,');
-    buf.writeln('      props: state.stateProps.copyWith(');
+    buf.writeln('      stateProps: state.stateProps.copyWith(');
     buf.writeln('        ${camel}OnLoadState: SubState.loading(),');
     buf.writeln('      ),');
-    buf.writeln('    ) as T);');
+    buf.writeln('    ) as $stateType);');
     buf.writeln('    final result = await featureUseCases.${camel}UseCase.call(');
     buf.writeln('      ${toPascal(unit)}Params(screenId: screenId, payload: event.hashCode),');
     buf.writeln('    );');
@@ -145,17 +160,17 @@ String generateMixinFile(GenConfig config, String unit, int index, List<String> 
     buf.writeln('      _${camel}State.cache[\'$unit\'] = data.toJson();');
     buf.writeln('      emit(state.copyWith(');
     buf.writeln('        loaderStatus: LoaderStatus.loaded,');
-    buf.writeln('        props: state.stateProps.copyWith(');
+    buf.writeln('        stateProps: state.stateProps.copyWith(');
     buf.writeln('          ${camel}OnLoadState: SubState.loaded(data),');
     buf.writeln('        ),');
-    buf.writeln('      ) as T);');
+    buf.writeln('      ) as $stateType);');
     buf.writeln('    }, (failure) {');
     buf.writeln('      emit(state.copyWith(');
     buf.writeln('        loaderStatus: LoaderStatus.error,');
-    buf.writeln('        props: state.stateProps.copyWith(');
+    buf.writeln('        stateProps: state.stateProps.copyWith(');
     buf.writeln('          ${camel}OnLoadState: SubState.error(failure.message),');
     buf.writeln('        ),');
-    buf.writeln('      ) as T);');
+    buf.writeln('      ) as $stateType);');
     buf.writeln('    });');
     if (m == 2) {
       buf.writeln('    event.completer?.complete(true);');
@@ -182,8 +197,8 @@ String _mixinOnClause(
   bool isGeneric,
 ) {
   final base = isGeneric
-      ? 'FeatureBlocBase<T>, ReactiveFormSessionMixin<T>, Bloc<FeatureEvent, T>'
-      : 'FeatureBlocBase<T>, Bloc<FeatureEvent, T>';
+      ? 'FeatureBlocBase<T>, Bloc<FeatureEvent, T>'
+      : 'FeatureBlocBase<FeatureState>, Bloc<FeatureEvent, FeatureState>';
   if (config.chain <= 0 || index == 0) return base;
   if (index % config.chain != 0) return base;
   final prevIdx = index - 1;

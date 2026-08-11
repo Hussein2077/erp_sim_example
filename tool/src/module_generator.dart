@@ -103,6 +103,8 @@ export 'core/m${moduleId}_injection/m${moduleId}_init_get_it.dart';
   String _moduleMixin(String moduleId, int index) {
     return '''
 import 'package:erp_scale_sim/core/src/common_app_export.dart';
+import 'package:erp_scale_sim/features/common_feature/presentation/controllers/bloc/feature_bloc.dart';
+import 'package:erp_scale_sim/features/common_feature/presentation/controllers/state/feature_state.dart';
 import '../events/module_${moduleId}_event_$index.dart';
 
 abstract class IModule${moduleId}Mixin$index<T extends FeatureState> {
@@ -115,7 +117,7 @@ class _Module${moduleId}Mixin${index}State {
   final Map<String, dynamic> cache = {};
 }
 
-mixin Module${moduleId}Mixin$index<T extends FeatureState>
+mixin Module${moduleId}Mixin$index<T extends FeatureState> on FeatureBloc<T>
     implements IModule${moduleId}Mixin$index<T> {
   final _Module${moduleId}Mixin${index}State _state = _Module${moduleId}Mixin${index}State();
 
@@ -154,23 +156,6 @@ class Module${moduleId}Event$index extends Equatable {
   }
 
   String _moduleBloc(String moduleId, String blocName, String contractName) {
-    final coreMixinImports = coreUnits.map((u) => "import 'package:erp_scale_sim/features/common_feature/presentation/controllers/${mixinDir(u)}/${u}_mixin.dart';").join('\n');
-    final coreMixins = coreUnits.map((u) {
-      if (nonGenericMixins.contains(u)) return '        ${mixinClassName(u)},';
-      return '        ${mixinClassName(u)}<T>,';
-    }).join('\n');
-    final moduleMixins = List.generate(
-      config.moduleMixins,
-      (i) => '        Module${moduleId}Mixin$i<T>,',
-    ).join('\n');
-    final allMixins = '$coreMixins\n$moduleMixins';
-    final coreRegistrations = coreUnits.map((u) => '    register${toPascal(u)}MixinHandlers();').join('\n');
-    final moduleRegistrations = List.generate(
-      config.moduleMixins,
-      (i) => '    registerModule${moduleId}Mixin${i}Handlers();',
-    ).join('\n');
-    final allRegistrations = '$coreRegistrations\n$moduleRegistrations';
-
     if (config.isComposition) {
       return '''
 import 'package:erp_scale_sim/core/src/common_app_export.dart';
@@ -186,38 +171,52 @@ abstract class $blocName extends FeatureController {
 ''';
     }
 
+    final moduleMixinLines = List.generate(
+      config.moduleMixins,
+      (i) => 'Module${moduleId}Mixin$i<T>',
+    );
+    final withClause = joinIndented(moduleMixinLines);
+    final moduleRegistrations = List.generate(
+      config.moduleMixins,
+      (i) => '    registerModule${moduleId}Mixin${i}Handlers();',
+    ).join('\n');
+
     return '''
 import 'package:erp_scale_sim/core/src/common_app_export.dart';
-import 'package:erp_scale_sim/features/common_feature/presentation/controllers/bloc/feature_bloc_base.dart';
+import 'package:erp_scale_sim/features/common_feature/presentation/controllers/bloc/feature_bloc.dart';
+import 'package:erp_scale_sim/features/common_feature/domain/use_cases/feature_use_cases.dart';
 import 'package:erp_scale_sim/features/common_feature/presentation/controllers/state/feature_state.dart';
 import 'module_${moduleId}_contract_bloc.dart';
-$coreMixinImports
 ${List.generate(config.moduleMixins, (i) => "import '../mixins/module_${moduleId}_mixin_$i.dart';").join('\n')}
 
-abstract class $blocName<T extends FeatureState> extends FeatureBlocBase<T>
+abstract class $blocName<T extends FeatureState> extends FeatureBloc<T>
     with
-$allMixins
+$withClause
     implements $contractName<T> {
   $blocName({
-    required super.featureUseCases,
-    required super.screenId,
+    required FeatureUseCases featureUseCases,
+    required String screenId,
     required T initialState,
-  }) : super(featureUseCases: featureUseCases, screenId: screenId, initialState: initialState) {
+  }) : super(
+          featureUseCases: featureUseCases,
+          screenId: screenId,
+          initialState: initialState,
+        ) {
     registerModule${moduleId}Handlers();
   }
 
   void registerModule${moduleId}Handlers() {
-$allRegistrations
+$moduleRegistrations
   }
 }
 ''';
   }
 
   String _moduleContract(String moduleId, String contractName) {
-    final contracts = List.generate(
-      config.moduleMixins,
-      (i) => '    IModule${moduleId}Mixin$i<T>,',
-    ).join('\n');
+    final contracts = joinIndented(
+      List.generate(config.moduleMixins, (i) => 'IModule${moduleId}Mixin$i<T>'),
+      indent: '    ',
+    );
     return '''
 import 'package:erp_scale_sim/features/common_feature/presentation/controllers/state/feature_state.dart';
 ${List.generate(config.moduleMixins, (i) => "import '../mixins/module_${moduleId}_mixin_$i.dart';").join('\n')}
@@ -270,24 +269,26 @@ $contracts {}
   String _screenState(String screenId, String stateType) {
     if (stateType == 'FeatureState') return '';
     return '''
+import 'package:erp_scale_sim/core/src/common_app_export.dart';
 import 'package:erp_scale_sim/features/common_feature/presentation/controllers/state/feature_state.dart';
+import 'package:erp_scale_sim/features/common_feature/presentation/controllers/state/feature_state_props.dart';
 
 class Screen${screenId}State extends FeatureState {
   const Screen${screenId}State({
     super.loaderStatus,
-    super.props,
+    super.stateProps,
     super.screenId,
   });
 
   @override
   Screen${screenId}State copyWith({
     LoaderStatus? loaderStatus,
-    FeatureStateProps? props,
+    FeatureStateProps? stateProps,
     String? screenId,
   }) {
     return Screen${screenId}State(
       loaderStatus: loaderStatus ?? this.loaderStatus,
-      props: props ?? this.props,
+      stateProps: stateProps ?? this.stateProps,
       screenId: screenId ?? this.screenId,
     );
   }

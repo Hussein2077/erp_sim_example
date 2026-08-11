@@ -48,3 +48,14 @@ int countDartLines(String root) {
 }
 
 String padNum(int n, int width) => n.toString().padLeft(width, '0');
+
+/// Joins [items] one per line with [indent], comma-separated except on the last.
+String joinIndented(List<String> items, {String indent = '        '}) {
+  if (items.isEmpty) return '';
+  final buf = StringBuffer();
+  for (var i = 0; i < items.length; i++) {
+    final suffix = i < items.length - 1 ? ',' : '';
+    buf.writeln('$indent${items[i]}$suffix');
+  }
+  return buf.toString().trimRight();
+}

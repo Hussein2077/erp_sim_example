@@ -44,6 +44,7 @@ dependencies:
   erp_scale_sim:
     path: ../
   flutter_bloc: ^9.1.0
+  bloc: ^9.0.0
   get_it: ^8.0.3
 $moduleDeps
 
@@ -75,8 +76,6 @@ flutter:
     ).join('\n');
 
     _write('app/lib/core/injection/injector.dart', '''
-import 'package:erp_scale_sim/core/injection/core_injector.dart';
-import 'package:erp_scale_sim/core/injection/get_it.dart';
 import 'package:erp_scale_sim/features/common_feature/injection/common_feature_injection.dart';
 $imports
 

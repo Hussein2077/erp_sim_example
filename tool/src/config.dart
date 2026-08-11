@@ -111,7 +111,7 @@ const List<String> coreMixinUnits = [
 ];
 
 /// Non-generic mixins (no type parameter).
-const Set<String> nonGenericMixins = {'feature_body_mapping'};
+const Set<String> nonGenericMixins = {};
 
 String toPascal(String snake) {
   return snake
