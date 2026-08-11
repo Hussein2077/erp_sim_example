@@ -1,0 +1,11 @@
+{
+    "name": "erp_scale_sim",
+    "short_name": "erp_scale_sim",
+    "start_url": ".",
+    "display": "standalone",
+    "background_color": "#0175C2",
+    "theme_color": "#0175C2",
+    "description": "Flutter Web reproduction for generic mixin compile cost",
+    "orientation": "portrait-primary",
+    "prefer_related_applications": false
+}

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="erp_scale_sim Flutter Web reproduction">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="erp_scale_sim">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="icon" type="image/png" href="favicon.png"/>
+  <title>erp_scale_sim</title>
+  <link rel="manifest" href="manifest.json">
+  <script>
+    // Capture page load time before Dart main() for startup measurement
+    window._pageLoadEpochMs = performance.now();
+  </script>
+</head>
+<body>
+  <script src="flutter_bootstrap.js" async></script>
+  <script>
+    // Pass page load anchor to Dart via global
+    window.addEventListener('load', function() {
+      if (window._pageLoadEpochMs !== undefined) {
+        // Will be read by Dart through dart:js_interop if needed
+      }
+    });
+  </script>
+</body>
+</html>
