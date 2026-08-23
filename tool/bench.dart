@@ -26,7 +26,7 @@ Future<void> main(List<String> args) async {
 
   final screenCounts = screensArg.split(',').map(int.parse).toList();
   final modes = mode == 'all' ? ['ddc', 'release'] : [mode];
-  final archs = ['composition', 'mixin', 'mixin-shared'];
+  final archs = ['composition', 'one-mixin', 'mixin-without-generic', 'mixin', 'mixin-shared'];
 
   final csv = StringBuffer('arch,screens,mode,pub_get_s,compile_s,dart_files,dart_lines\n');
 

@@ -27,13 +27,12 @@ String generateContractFile(GenConfig config, String unit) {
   return buf.toString();
 }
 
-/// Generates a single mixin file (~270 lines).
 String generateMixinFile(GenConfig config, String unit, int index, List<String> units) {
   final cls = mixinClassName(unit);
   final stateCls = mixinStateClass(unit);
   final eventCls = eventClassName(unit);
   final camel = toCamel(unit);
-  final isGeneric = !nonGenericMixins.contains(unit);
+  final isGeneric = !config.isMixinWithoutGeneric && !nonGenericMixins.contains(unit);
   final typeParam = isGeneric ? '<T extends FeatureState>' : '';
   final stateType = isGeneric ? 'T' : 'FeatureState';
   final onClause = _mixinOnClause(config, unit, index, units, isGeneric);
@@ -47,7 +46,7 @@ String generateMixinFile(GenConfig config, String unit, int index, List<String> 
   buf.writeln("import '../../contracts/${unit}_contract.dart';");
   buf.writeln("import '../../../../domain/entities/${unit}_ent.dart';");
   buf.writeln("import '../../../../domain/use_cases/${unit}_use_case.dart';");
-  if (isGeneric && unit != 'reactive_form_session') {
+  if (unit != 'reactive_form_session') {
     final relPath = isCoreMixin(unit) ? '' : '../core/';
     buf.writeln("import '${relPath}reactive_form_session_mixin.dart';");
   }
@@ -139,6 +138,7 @@ String generateMixinFile(GenConfig config, String unit, int index, List<String> 
   }
 
   // Private handlers
+  final castSuffix = isGeneric ? ' as $stateType' : '';
   for (var m = 0; m < config.methods; m++) {
     final opName = m == 0
         ? 'Load'
@@ -159,7 +159,7 @@ String generateMixinFile(GenConfig config, String unit, int index, List<String> 
     buf.writeln('      stateProps: state.stateProps.copyWith(');
     buf.writeln('        ${camel}OnLoadState: const SubState.loading(),');
     buf.writeln('      ),');
-    buf.writeln('    ) as $stateType);');
+    buf.writeln('    )$castSuffix);');
     buf.writeln('    final result = await featureUseCases.${camel}UseCase.call(');
     buf.writeln('      ${toPascal(unit)}Params(screenId: screenId, payload: event.hashCode),');
     buf.writeln('    );');
@@ -170,14 +170,14 @@ String generateMixinFile(GenConfig config, String unit, int index, List<String> 
     buf.writeln('        stateProps: state.stateProps.copyWith(');
     buf.writeln('          ${camel}OnLoadState: SubState.loaded(data),');
     buf.writeln('        ),');
-    buf.writeln('      ) as $stateType);');
+    buf.writeln('      )$castSuffix);');
     buf.writeln('    }, (failure) {');
     buf.writeln('      emit(state.copyWith(');
     buf.writeln('        loaderStatus: LoaderStatus.error,');
     buf.writeln('        stateProps: state.stateProps.copyWith(');
     buf.writeln('          ${camel}OnLoadState: SubState.error(failure.message),');
     buf.writeln('        ),');
-    buf.writeln('      ) as $stateType);');
+    buf.writeln('      )$castSuffix);');
     buf.writeln('    });');
     if (m == 2) {
       buf.writeln('    event.completer?.complete(true);');
@@ -211,14 +211,16 @@ String _mixinOnClause(
       ? (unit == 'reactive_form_session'
           ? 'FeatureBlocBase<T>, Bloc<FeatureEvent, T>'
           : 'FeatureBlocBase<T>, Bloc<FeatureEvent, T>, ReactiveFormSessionMixin<T>')
-      : 'FeatureBlocBase<FeatureState>, Bloc<FeatureEvent, FeatureState>';
+      : (unit == 'reactive_form_session'
+          ? 'FeatureBlocBase<FeatureState>, Bloc<FeatureEvent, FeatureState>'
+          : 'FeatureBlocBase<FeatureState>, Bloc<FeatureEvent, FeatureState>, ReactiveFormSessionMixin');
   if (config.chain <= 0 || index == 0) return base;
   if (index % config.chain != 0) return base;
   final prevIdx = index - 1;
   if (prevIdx < 0) return base;
   final prev = units[prevIdx];
   if (prev == 'reactive_form_session') return base;
-  if (nonGenericMixins.contains(prev)) {
+  if (!isGeneric || nonGenericMixins.contains(prev)) {
     return '$base, ${mixinClassName(prev)}';
   }
   return '$base, ${mixinClassName(prev)}<T>';

@@ -12,7 +12,7 @@ class GenConfig {
     required this.cross,
   });
 
-  final String arch; // composition | mixin | mixin-shared
+  final String arch; // composition | one-mixin | mixin-without-generic | mixin | mixin-shared
   final int modules;
   final int screens;
   final int mixins;
@@ -23,6 +23,8 @@ class GenConfig {
   final int cross;
 
   bool get isComposition => arch == 'composition';
+  bool get isOneMixin => arch == 'one-mixin';
+  bool get isMixinWithoutGeneric => arch == 'mixin-without-generic';
   bool get isMixinShared => arch == 'mixin-shared';
   bool get isMixin => arch == 'mixin';
 
@@ -59,7 +61,7 @@ class GenConfig {
       }
     }
 
-    if (!['composition', 'mixin', 'mixin-shared'].contains(arch)) {
+    if (!['composition', 'one-mixin', 'mixin-without-generic', 'mixin', 'mixin-shared'].contains(arch)) {
       throw ArgumentError('Invalid --arch: $arch');
     }
 

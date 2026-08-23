@@ -430,14 +430,19 @@ ${units.map((u) => '  final ${useCaseClassName(u)} ${toCamel(u)}UseCase;').join(
 }
 ''');
 
-    // Mixins (only for non-composition architectures)
-    if (!config.isComposition) {
+    // Mixins
+    if (config.isMixin || config.isMixinShared || config.isMixinWithoutGeneric) {
       for (var i = 0; i < units.length; i++) {
         _write(
           'lib/features/common_feature/presentation/controllers/${mixinDir(units[i])}/${units[i]}_mixin.dart',
           generateMixinFile(config, units[i], i, units),
         );
       }
+    } else if (config.isOneMixin) {
+      _write(
+        'lib/features/common_feature/presentation/controllers/mixins/feature_mixin.dart',
+        _generateOneMixin(),
+      );
     }
 
     // State
@@ -447,14 +452,17 @@ ${units.map((u) => '  final ${useCaseClassName(u)} ${toCamel(u)}UseCase;').join(
     // Bloc base chain
     _write('lib/features/common_feature/presentation/controllers/bloc/feature_bloc_base.dart', _featureBlocBase());
     _write('lib/features/common_feature/presentation/controllers/bloc/feature_contract_bloc.dart', _featureContractBloc());
-    _write('lib/features/common_feature/presentation/controllers/bloc/feature_capability.dart', _featureCapability());
 
-    // Capabilities (Composition Objects)
-    for (final unit in units) {
-      _write(
-        'lib/features/common_feature/presentation/controllers/capabilities/${unit}_capability.dart',
-        _generateCapability(config, unit),
-      );
+    if (config.isComposition) {
+      _write('lib/features/common_feature/presentation/controllers/bloc/feature_capability.dart', _featureCapability());
+
+      // Capabilities (Composition Objects)
+      for (final unit in units) {
+        _write(
+          'lib/features/common_feature/presentation/controllers/capabilities/${unit}_capability.dart',
+          _generateCapability(config, unit),
+        );
+      }
     }
 
     _write('lib/features/common_feature/presentation/controllers/bloc/feature_bloc.dart', _featureBloc());
@@ -703,6 +711,46 @@ abstract class FeatureBlocBase<T extends FeatureState> extends Bloc<FeatureEvent
   }
 
   String _featureContractBloc() {
+    if (config.isOneMixin) {
+      final methodSignatures = units.map((u) {
+        final buf = StringBuffer();
+        final camel = toCamel(u);
+        final pascal = toPascal(u);
+        buf.writeln('  SubState<${pascal}Ent>? get ${camel}OnLoadState;');
+        for (var m = 0; m < config.methods; m++) {
+          if (m == 0) {
+            buf.writeln('  Future<void> load${pascal}Screen({String? docSrl, bool force = false});');
+          } else if (m == 1) {
+            buf.writeln('  Future<void> submit$pascal({int payload = 0, Map<String, dynamic>? currentPk});');
+          } else if (m == 2) {
+            buf.writeln('  Future<bool> refresh$pascal({int pgNo = 1, int pgSz = 20});');
+          } else if (m == 3) {
+            buf.writeln('  void reset$pascal();');
+          } else {
+            buf.writeln('  Future<void> execute${pascal}Op$m({Map<String, dynamic>? params});');
+          }
+        }
+        return buf.toString();
+      }).join('\n');
+
+      return '''
+import 'package:erp_scale_sim/core/src/common_app_export.dart';
+import '../../../domain/use_cases/feature_use_cases.dart';
+import '../state/feature_state.dart';
+${units.map((u) => "import '../../../domain/entities/${u}_ent.dart';").join('\n')}
+
+abstract class IFeatureMixin {
+$methodSignatures
+}
+
+abstract class IFeatureBloc<T extends FeatureState> implements IFeatureMixin {
+  FeatureUseCases get featureUseCases;
+  String get screenId;
+  T get state;
+}
+''';
+    }
+
     final contracts = joinIndented(
       units.map((u) => mixinContractName(u)).toList(),
       indent: '    ',
@@ -721,7 +769,235 @@ $contracts {
 ''';
   }
 
+  String _generateOneMixin() {
+    final stateClasses = units.map((u) {
+      final stateCls = '_${toPascal(u)}MixinState';
+      return '''
+class $stateCls {
+  int loadCount = 0;
+  int submitCount = 0;
+  final Map<String, dynamic> cache = {};
+  final Set<String> pendingKeys = {};
+  Completer<void>? inFlight;
+  ScrMode mode = ScrMode.view;
+}''';
+    }).join('\n\n');
+
+    final stateInstances = units.map((u) {
+      return '  final _${toPascal(u)}MixinState _${toCamel(u)}State = _${toPascal(u)}MixinState();';
+    }).join('\n');
+
+    final eventRegistrations = units.map((u) {
+      final eventCls = eventClassName(u);
+      final buf = StringBuffer();
+      buf.writeln('    on<$eventCls>((event, emit) async {');
+      buf.writeln('      switch (event) {');
+      for (var m = 0; m < config.methods; m++) {
+        final opName = m == 0 ? 'Load' : m == 1 ? 'Submit' : m == 2 ? 'Refresh' : m == 3 ? 'Reset' : 'Op$m';
+        buf.writeln('        case ${toPascal(u)}${opName}Event():');
+        buf.writeln('          await _handle${toPascal(u)}$opName(event);');
+      }
+      buf.writeln('      }');
+      buf.writeln('    });');
+      return buf.toString();
+    }).join('\n');
+
+    final statePropsGetters = units.map((u) {
+      final camel = toCamel(u);
+      return '  @override\n  SubState<${toPascal(u)}Ent>? get ${camel}OnLoadState => state.stateProps.${camel}OnLoadState;';
+    }).join('\n\n');
+
+    final methodImpls = units.map((u) {
+      final buf = StringBuffer();
+      final camel = toCamel(u);
+      final pascal = toPascal(u);
+      for (var m = 0; m < config.methods; m++) {
+        if (m == 0) {
+          buf.writeln('  @override Future<void> load${pascal}Screen({String? docSrl, bool force = false}) => dispatchWithCompleter(${pascal}LoadEvent(docSrl: docSrl, force: force));');
+        } else if (m == 1) {
+          buf.writeln('  @override Future<void> submit$pascal({int payload = 0, Map<String, dynamic>? currentPk}) => dispatchWithCompleter(${pascal}SubmitEvent(payload: payload, currentPk: currentPk));');
+        } else if (m == 2) {
+          buf.writeln('  @override Future<bool> refresh$pascal({int pgNo = 1, int pgSz = 20}) async { final c = Completer<bool>(); add(${pascal}RefreshEvent(pgNo: pgNo, pgSz: pgSz, completer: c)); return c.future; }');
+        } else if (m == 3) {
+          buf.writeln('  @override void reset$pascal() => add(const ${pascal}ResetEvent());');
+        } else {
+          buf.writeln('  @override Future<void> execute${pascal}Op$m({Map<String, dynamic>? params}) => dispatchWithCompleter(${pascal}Op${m}Event(params: params));');
+        }
+      }
+
+      buf.writeln();
+      for (var m = 0; m < config.methods; m++) {
+        final opName = m == 0 ? 'Load' : m == 1 ? 'Submit' : m == 2 ? 'Refresh' : m == 3 ? 'Reset' : 'Op$m';
+        if (m == 3) {
+          buf.writeln('  Future<void> _handle${pascal}Reset(${pascal}ResetEvent event) async {');
+          buf.writeln('    _${camel}State.loadCount = 0;');
+          buf.writeln('    _${camel}State.submitCount = 0;');
+          buf.writeln('    _${camel}State.cache.clear();');
+          buf.writeln('    _${camel}State.pendingKeys.clear();');
+          buf.writeln('    emit(state.copyWith(');
+          buf.writeln('      stateProps: state.stateProps.copyWith(${camel}OnLoadState: null),');
+          buf.writeln('    ) as T);');
+          buf.writeln('  }');
+        } else {
+          buf.writeln('  Future<void> _handle$pascal$opName($pascal${opName}Event event) async {');
+          buf.writeln('    _${camel}State.loadCount++;');
+          buf.writeln('    emit(state.copyWith(');
+          buf.writeln('      loaderStatus: LoaderStatus.loading,');
+          buf.writeln('      stateProps: state.stateProps.copyWith(${camel}OnLoadState: const SubState.loading()),');
+          buf.writeln('    ) as T);');
+          buf.writeln('    final result = await featureUseCases.${camel}UseCase.call(${pascal}Params(screenId: screenId, payload: event.hashCode));');
+          buf.writeln('    safeFold(result, (data) {');
+          buf.writeln('      _${camel}State.cache[\'$u\'] = data.toJson();');
+          buf.writeln('      emit(state.copyWith(');
+          buf.writeln('        loaderStatus: LoaderStatus.loaded,');
+          buf.writeln('        stateProps: state.stateProps.copyWith(${camel}OnLoadState: SubState.loaded(data)),');
+          buf.writeln('      ) as T);');
+          buf.writeln('    }, (f) {');
+          buf.writeln('      emit(state.copyWith(');
+          buf.writeln('        loaderStatus: LoaderStatus.error,');
+          buf.writeln('        stateProps: state.stateProps.copyWith(${camel}OnLoadState: SubState.error(f.message)),');
+          buf.writeln('      ) as T);');
+          buf.writeln('    });');
+          if (m == 2) buf.writeln('    event.completer?.complete(true);');
+          buf.writeln('  }');
+        }
+        buf.writeln();
+      }
+
+      for (var p = 0; p < 12; p++) {
+        buf.writeln('  bool _${camel}Check$p(ScrMode mode) => _${camel}State.mode == mode;');
+      }
+      buf.writeln();
+      buf.writeln('  bool check${pascal}Mode(ScrMode mode) =>');
+      final checkLines = List.generate(12, (p) => '      _${camel}Check$p(mode)').join(' ||\n');
+      buf.writeln('$checkLines;');
+
+      return buf.toString();
+    }).join('\n\n');
+
+    return '''
+// ignore_for_file: invalid_use_of_visible_for_testing_member
+import 'package:erp_scale_sim/core/src/common_app_export.dart';
+import '../events/feature_event.dart';
+import '../bloc/feature_bloc_base.dart';
+import '../bloc/feature_contract_bloc.dart';
+import '../state/feature_state.dart';
+${units.map((u) => "import '../../../domain/entities/${u}_ent.dart';").join('\n')}
+${units.map((u) => "import '../../../domain/use_cases/${u}_use_case.dart';").join('\n')}
+${units.map((u) => "import '../events/${eventDir(u).split('/').last}/${u}_event.dart';").join('\n')}
+
+$stateClasses
+
+mixin FeatureMixin<T extends FeatureState> on FeatureBlocBase<T>, Bloc<FeatureEvent, T>
+    implements IFeatureBloc<T> {
+$stateInstances
+
+  void registerFeatureMixinHandlers() {
+$eventRegistrations
+  }
+
+$statePropsGetters
+
+$methodImpls
+}
+''';
+  }
+
   String _featureBloc() {
+    if (config.isOneMixin) {
+      return '''
+import 'feature_bloc_base.dart';
+import 'feature_contract_bloc.dart';
+import '../state/feature_state.dart';
+import '../mixins/feature_mixin.dart';
+
+class FeatureBloc<T extends FeatureState> extends FeatureBlocBase<T>
+    with FeatureMixin<T>
+    implements IFeatureBloc<T> {
+  FeatureBloc({
+    required super.featureUseCases,
+    required super.screenId,
+    required T initialState,
+  }) : super(initialState) {
+    registerFeatureEventHandlers();
+  }
+
+  @override
+  void registerFeatureEventHandlers() {
+    super.registerFeatureEventHandlers();
+    registerFeatureMixinHandlers();
+  }
+}
+''';
+    }
+
+    if (config.isMixinWithoutGeneric) {
+      final mixinLines = units.map((u) => mixinClassName(u)).toList();
+      final withClause = joinIndented(mixinLines);
+      final registrations = units.map((u) => '    register${toPascal(u)}MixinHandlers();').join('\n');
+
+      return '''
+import 'feature_bloc_base.dart';
+import 'feature_contract_bloc.dart';
+import '../state/feature_state.dart';
+${units.map((u) => "import '../${mixinDir(u)}/${u}_mixin.dart';").join('\n')}
+
+class FeatureBloc extends FeatureBlocBase<FeatureState>
+    with
+$withClause
+    implements IFeatureBloc<FeatureState> {
+  FeatureBloc({
+    required super.featureUseCases,
+    required super.screenId,
+    required FeatureState initialState,
+  }) : super(initialState) {
+    registerFeatureEventHandlers();
+  }
+
+  @override
+  void registerFeatureEventHandlers() {
+    super.registerFeatureEventHandlers();
+$registrations
+  }
+}
+''';
+    }
+
+    if (config.isMixin || config.isMixinShared) {
+      final mixinLines = units.map((u) {
+        if (nonGenericMixins.contains(u)) return mixinClassName(u);
+        return '${mixinClassName(u)}<T>';
+      }).toList();
+      final withClause = joinIndented(mixinLines);
+      final registrations = units.map((u) => '    register${toPascal(u)}MixinHandlers();').join('\n');
+
+      return '''
+import 'feature_bloc_base.dart';
+import 'feature_contract_bloc.dart';
+import '../state/feature_state.dart';
+${units.map((u) => "import '../${mixinDir(u)}/${u}_mixin.dart';").join('\n')}
+
+class FeatureBloc<T extends FeatureState> extends FeatureBlocBase<T>
+    with
+$withClause
+    implements IFeatureBloc<T> {
+  FeatureBloc({
+    required super.featureUseCases,
+    required super.screenId,
+    required T initialState,
+  }) : super(initialState) {
+    registerFeatureEventHandlers();
+  }
+
+  @override
+  void registerFeatureEventHandlers() {
+    super.registerFeatureEventHandlers();
+$registrations
+  }
+}
+''';
+    }
+
     final capFields = units.map((u) {
       return '  late final ${capabilityClassName(u)}<T> ${toCamel(u)}Capability;';
     }).join('\n');
@@ -989,13 +1265,18 @@ class FeatureGrid extends StatelessWidget {
   }
 
   void _generateBarrelExports() {
+    final extraExport = config.isComposition
+        ? "export 'presentation/controllers/bloc/feature_capability.dart';"
+        : config.isOneMixin
+            ? "export 'presentation/controllers/mixins/feature_mixin.dart';"
+            : "";
     _write('lib/features/common_feature/common_feature.dart', '''
 export 'domain/use_cases/feature_use_cases.dart';
 export 'domain/entities/load_scr_ent.dart';
 export 'data/datasources/feature_remote_data_source.dart';
 export 'data/repos/feature_repo.dart';
 export 'presentation/controllers/bloc/feature_bloc.dart';
-export 'presentation/controllers/bloc/feature_capability.dart';
+$extraExport
 export 'presentation/controllers/state/feature_state.dart';
 export 'injection/common_feature_injection.dart';
 ''');

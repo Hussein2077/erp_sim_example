@@ -19,7 +19,9 @@ void writeFile(String path, String content) {
 void deleteDirIfExists(String path) {
   final dir = Directory(path);
   if (dir.existsSync()) {
-    dir.deleteSync(recursive: true);
+    try {
+      dir.deleteSync(recursive: true);
+    } catch (_) {}
   }
 }
 

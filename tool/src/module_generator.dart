@@ -105,6 +105,47 @@ export 'core/m${moduleId}_injection/m${moduleId}_init_get_it.dart';
   }
 
   String _moduleMixin(String moduleId, int index) {
+    final mixinName = 'Module${moduleId}Mixin$index';
+    if (config.isMixinWithoutGeneric) {
+      return '''
+import 'package:erp_scale_sim/core/src/common_app_export.dart';
+import 'package:erp_scale_sim/features/common_feature/presentation/controllers/bloc/feature_bloc.dart';
+import '../events/module_${moduleId}_event_$index.dart';
+
+abstract class IModule${moduleId}Mixin$index {
+  SubState<Map<String, dynamic>>? get module${moduleId}State$index;
+  Future<void> runModule${moduleId}Op$index({int payload = 0});
+}
+
+class _Module${moduleId}Mixin${index}State {
+  int count = 0;
+  final Map<String, dynamic> cache = {};
+}
+
+mixin $mixinName on FeatureBloc
+    implements I$mixinName {
+  final _Module${moduleId}Mixin${index}State _state = _Module${moduleId}Mixin${index}State();
+
+  @override
+  SubState<Map<String, dynamic>>? get module${moduleId}State$index =>
+      SubState.loaded(_state.cache);
+
+  void registerModule${moduleId}Mixin${index}Handlers() {
+    on<Module${moduleId}Event$index>((event, emit) async {
+      _state.count++;
+      _state.cache['op'] = event.payload;
+      emit(state.copyWith(loaderStatus: LoaderStatus.loaded));
+    });
+  }
+
+  @override
+  Future<void> runModule${moduleId}Op$index({int payload = 0}) async {
+    add(Module${moduleId}Event$index(payload: payload));
+  }
+}
+''';
+    }
+
     return '''
 import 'package:erp_scale_sim/core/src/common_app_export.dart';
 import 'package:erp_scale_sim/features/common_feature/presentation/controllers/bloc/feature_bloc.dart';
@@ -175,6 +216,41 @@ abstract class $blocName<T extends FeatureState> extends FeatureBloc<T> {
 ''';
     }
 
+    if (config.isMixinWithoutGeneric) {
+      final moduleMixinLines = List.generate(
+        config.moduleMixins,
+        (i) => 'Module${moduleId}Mixin$i',
+      );
+      final withClause = joinIndented(moduleMixinLines);
+      final moduleRegistrations = List.generate(
+        config.moduleMixins,
+        (i) => '    registerModule${moduleId}Mixin${i}Handlers();',
+      ).join('\n');
+
+      return '''
+import 'package:erp_scale_sim/features/common_feature/presentation/controllers/bloc/feature_bloc.dart';
+import 'module_${moduleId}_contract_bloc.dart';
+${List.generate(config.moduleMixins, (i) => "import '../mixins/module_${moduleId}_mixin_$i.dart';").join('\n')}
+
+abstract class $blocName extends FeatureBloc
+    with
+$withClause
+    implements $contractName {
+  $blocName({
+    required super.featureUseCases,
+    required super.screenId,
+    required super.initialState,
+  }) {
+    registerModule${moduleId}Handlers();
+  }
+
+  void registerModule${moduleId}Handlers() {
+$moduleRegistrations
+  }
+}
+''';
+    }
+
     final moduleMixinLines = List.generate(
       config.moduleMixins,
       (i) => 'Module${moduleId}Mixin$i<T>',
@@ -211,6 +287,19 @@ $moduleRegistrations
   }
 
   String _moduleContract(String moduleId, String contractName) {
+    if (config.isMixinWithoutGeneric) {
+      final contracts = joinIndented(
+        List.generate(config.moduleMixins, (i) => 'IModule${moduleId}Mixin$i'),
+        indent: '    ',
+      );
+      return '''
+${List.generate(config.moduleMixins, (i) => "import '../mixins/module_${moduleId}_mixin_$i.dart';").join('\n')}
+
+abstract class $contractName implements
+$contracts {}
+''';
+    }
+
     final contracts = joinIndented(
       List.generate(config.moduleMixins, (i) => 'IModule${moduleId}Mixin$i<T>'),
       indent: '    ',
@@ -258,7 +347,7 @@ $contracts {}
   }
 
   String _stateTypeName(String screenId) {
-    if (config.isMixinShared || config.isComposition) {
+    if (config.isMixinShared || config.isComposition || config.isOneMixin || config.isMixinWithoutGeneric) {
       return 'FeatureState';
     }
     return 'Screen${screenId}State';
@@ -311,6 +400,32 @@ class $blocClass extends Module${moduleId}Bloc<FeatureState> {
           initialState: const FeatureState(screenId: 'screen_$screenId'),
         ) {
     CommonFeatureInjection.register();
+  }
+}
+''';
+    }
+
+    if (config.isMixinWithoutGeneric) {
+      return '''
+import 'package:erp_scale_sim/core/contracts/screens/screen_caller.dart';
+import 'package:erp_scale_sim/features/common_feature/injection/common_feature_injection.dart';
+import 'package:erp_scale_sim/features/common_feature/presentation/controllers/state/feature_state.dart';
+import 'package:erp_scale_sim/features/common_feature/domain/use_cases/feature_use_cases.dart';
+import 'package:module_$moduleId/src/common/presentation/controllers/bloc/module_${moduleId}_bloc.dart';
+
+class $blocClass extends Module${moduleId}Bloc {
+  $blocClass()
+      : super(
+          featureUseCases: ScreenCaller.getService<FeatureUseCases>(),
+          screenId: 'screen_$screenId',
+          initialState: const FeatureState(screenId: 'screen_$screenId'),
+        ) {
+    CommonFeatureInjection.register();
+    registerScreen${screenId}Handlers();
+  }
+
+  void registerScreen${screenId}Handlers() {
+    // Screen-local handler registration hook
   }
 }
 ''';
