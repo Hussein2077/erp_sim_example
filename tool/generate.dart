@@ -2,10 +2,10 @@
 /// Generates the erp_scale_sim synthetic multi-package workspace.
 ///
 /// Usage:
-///   dart run tool/generate.dart --arch=mixin --modules=15 --screens=800 --mixins=29                     1:30
-///   dart run tool/generate.dart --arch=composition --modules=15 --screens=800 --mixins=29               25
+///   dart run tool/generate.dart --arch=mixin --modules=15 --screens=800 --mixins=29                     1:30 2.30 s from windows
+///   dart run tool/generate.dart --arch=composition --modules=15 --screens=800 --mixins=29               25 1.00 s from windows
 ///   dart run tool/generate.dart --arch=one-mixin --modules=15 --screens=800 --mixins=29                 27
-///   dart run tool/generate.dart --arch=mixin-without-generic --modules=15 --screens=800 --mixins=29     1:45
+///   dart run tool/generate.dart --arch=mixin-without-generic --modules=15 --screens=800 --mixins=29     1:45 3.00 s from windows
 ///
 ///
 
