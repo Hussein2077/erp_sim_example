@@ -447,11 +447,17 @@ ${units.map((u) => '  final ${useCaseClassName(u)} ${toCamel(u)}UseCase;').join(
     // Bloc base chain
     _write('lib/features/common_feature/presentation/controllers/bloc/feature_bloc_base.dart', _featureBlocBase());
     _write('lib/features/common_feature/presentation/controllers/bloc/feature_contract_bloc.dart', _featureContractBloc());
-    if (config.isComposition) {
-      _generateComposition();
-    } else {
-      _write('lib/features/common_feature/presentation/controllers/bloc/feature_bloc.dart', _featureBloc());
+    _write('lib/features/common_feature/presentation/controllers/bloc/feature_capability.dart', _featureCapability());
+
+    // Capabilities (Composition Objects)
+    for (final unit in units) {
+      _write(
+        'lib/features/common_feature/presentation/controllers/capabilities/${unit}_capability.dart',
+        _generateCapability(config, unit),
+      );
     }
+
+    _write('lib/features/common_feature/presentation/controllers/bloc/feature_bloc.dart', _featureBloc());
 
     // Data layer
     _write('lib/features/common_feature/data/datasources/feature_remote_data_source.dart', '''
@@ -485,38 +491,30 @@ abstract class FeatureContract {
     _write('lib/features/common_feature/presentation/view/widgets/feature_grid.dart', _featureGrid());
   }
 
-  void _generateComposition() {
-    _write('lib/features/common_feature/presentation/controllers/bloc/feature_store.dart', _featureStore());
-    _write('lib/features/common_feature/presentation/controllers/bloc/feature_controller.dart', _featureController());
-    _write('lib/features/common_feature/presentation/controllers/bloc/feature_capability.dart', '''
-import 'feature_controller.dart';
+  String _featureCapability() {
+    return '''
+import 'feature_bloc.dart';
+import '../state/feature_state.dart';
 
-abstract class FeatureCapability {
+abstract class FeatureCapability<T extends FeatureState> {
   String get unitId;
-  void registerHandlers(FeatureController controller);
+  void registerHandlers(FeatureBloc<T> bloc);
 }
-''');
-
-    for (final unit in units) {
-      _write(
-        'lib/features/common_feature/presentation/controllers/capabilities/${unit}_capability.dart',
-        _generateCapability(config, unit),
-      );
-    }
+''';
   }
 
   String _generateCapability(GenConfig config, String unit) {
     final cap = capabilityClassName(unit);
     final contract = mixinContractName(unit);
-    final stateCls = mixinStateClass(unit);
+    final stateCls = '_${toPascal(unit)}CapabilityState';
     final eventCls = eventClassName(unit);
     final camel = toCamel(unit);
 
     final buf = StringBuffer();
     buf.writeln("import 'package:erp_scale_sim/core/src/common_app_export.dart';");
     buf.writeln("import '../bloc/feature_capability.dart';");
-    buf.writeln("import '../bloc/feature_controller.dart';");
-    buf.writeln("import '../bloc/feature_store.dart';");
+    buf.writeln("import '../bloc/feature_bloc.dart';");
+    buf.writeln("import '../state/feature_state.dart';");
     buf.writeln("import '../contracts/${unit}_contract.dart';");
     buf.writeln("import '../../../domain/entities/${unit}_ent.dart';");
     buf.writeln("import '../../../domain/use_cases/${unit}_use_case.dart';");
@@ -531,16 +529,22 @@ abstract class FeatureCapability {
     buf.writeln('  ScrMode mode = ScrMode.view;');
     buf.writeln('}');
     buf.writeln();
-    buf.writeln('class $cap implements FeatureCapability, $contract {');
-    buf.writeln('  $cap(this._store);');
-    buf.writeln('  final FeatureStore _store;');
+    buf.writeln('class $cap<T extends FeatureState> implements FeatureCapability<T>, $contract {');
+    buf.writeln('  $cap(this._host);');
+    buf.writeln('  final FeatureBloc<T> _host;');
     buf.writeln('  final $stateCls _state = $stateCls();');
     buf.writeln();
     buf.writeln('  @override String get unitId => \'$unit\';');
     buf.writeln();
+    buf.writeln('  /// Direct access to host FeatureBloc');
+    buf.writeln('  FeatureBloc<T> get host => _host;');
+    buf.writeln();
+    buf.writeln('  /// Convenient access to any sibling capability');
+    buf.writeln('  C sibling<C extends FeatureCapability<T>>() => _host.getCapability<C>();');
+    buf.writeln();
     buf.writeln('  @override');
-    buf.writeln('  void registerHandlers(FeatureController controller) {');
-    buf.writeln('    controller.on<$eventCls>((event, emit) async {');
+    buf.writeln('  void registerHandlers(FeatureBloc<T> bloc) {');
+    buf.writeln('    bloc.on<$eventCls>((event, emit) async {');
     buf.writeln('      switch (event) {');
     for (var m = 0; m < config.methods; m++) {
       final opName = m == 0 ? 'Load' : m == 1 ? 'Submit' : m == 2 ? 'Refresh' : m == 3 ? 'Reset' : 'Op$m';
@@ -553,20 +557,20 @@ abstract class FeatureCapability {
     buf.writeln();
 
     buf.writeln('  @override');
-    buf.writeln('  SubState<${toPascal(unit)}Ent>? get ${camel}OnLoadState => _store.state.stateProps.${camel}OnLoadState;');
+    buf.writeln('  SubState<${toPascal(unit)}Ent>? get ${camel}OnLoadState => _host.state.stateProps.${camel}OnLoadState;');
     buf.writeln();
 
     for (var m = 0; m < config.methods; m++) {
       if (m == 0) {
-        buf.writeln('  @override Future<void> load${toPascal(unit)}Screen({String? docSrl, bool force = false}) => _store.dispatch(${toPascal(unit)}LoadEvent(docSrl: docSrl, force: force));');
+        buf.writeln('  @override Future<void> load${toPascal(unit)}Screen({String? docSrl, bool force = false}) => _host.dispatchWithCompleter(${toPascal(unit)}LoadEvent(docSrl: docSrl, force: force));');
       } else if (m == 1) {
-        buf.writeln('  @override Future<void> submit${toPascal(unit)}({int payload = 0, Map<String, dynamic>? currentPk}) => _store.dispatch(${toPascal(unit)}SubmitEvent(payload: payload, currentPk: currentPk));');
+        buf.writeln('  @override Future<void> submit${toPascal(unit)}({int payload = 0, Map<String, dynamic>? currentPk}) => _host.dispatchWithCompleter(${toPascal(unit)}SubmitEvent(payload: payload, currentPk: currentPk));');
       } else if (m == 2) {
-        buf.writeln('  @override Future<bool> refresh${toPascal(unit)}({int pgNo = 1, int pgSz = 20}) async { final c = Completer<bool>(); _store.add(${toPascal(unit)}RefreshEvent(pgNo: pgNo, pgSz: pgSz, completer: c)); return c.future; }');
+        buf.writeln('  @override Future<bool> refresh${toPascal(unit)}({int pgNo = 1, int pgSz = 20}) async { final c = Completer<bool>(); _host.add(${toPascal(unit)}RefreshEvent(pgNo: pgNo, pgSz: pgSz, completer: c)); return c.future; }');
       } else if (m == 3) {
-        buf.writeln('  @override void reset${toPascal(unit)}() => _store.add(const ${toPascal(unit)}ResetEvent());');
+        buf.writeln('  @override void reset${toPascal(unit)}() => _host.add(const ${toPascal(unit)}ResetEvent());');
       } else {
-        buf.writeln('  @override Future<void> execute${toPascal(unit)}Op$m({Map<String, dynamic>? params}) => _store.dispatch(${toPascal(unit)}Op${m}Event(params: params));');
+        buf.writeln('  @override Future<void> execute${toPascal(unit)}Op$m({Map<String, dynamic>? params}) => _host.dispatchWithCompleter(${toPascal(unit)}Op${m}Event(params: params));');
       }
     }
     buf.writeln();
@@ -575,9 +579,9 @@ abstract class FeatureCapability {
       final opName = m == 0 ? 'Load' : m == 1 ? 'Submit' : m == 2 ? 'Refresh' : m == 3 ? 'Reset' : 'Op$m';
       buf.writeln('  Future<void> _handle$opName(${toPascal(unit)}${opName}Event event) async {');
       buf.writeln('    _state.loadCount++;');
-      buf.writeln('    _store.emitLoading(${camel}OnLoadState: const SubState.loading());');
-      buf.writeln('    final result = await _store.featureUseCases.${camel}UseCase.call(${toPascal(unit)}Params(screenId: _store.screenId, payload: event.hashCode));');
-      buf.writeln('    _store.safeFold(result, (data) { _state.cache[\'$unit\'] = data.toJson(); _store.emitLoaded(${camel}OnLoadState: SubState.loaded(data)); }, (f) { _store.emitError(${camel}OnLoadState: SubState.error(f.message)); });');
+      buf.writeln('    _host.emitLoading(${camel}OnLoadState: const SubState.loading());');
+      buf.writeln('    final result = await _host.featureUseCases.${camel}UseCase.call(${toPascal(unit)}Params(screenId: _host.screenId, payload: event.hashCode));');
+      buf.writeln('    _host.safeFold(result, (data) { _state.cache[\'$unit\'] = data.toJson(); _host.emitLoaded(${camel}OnLoadState: SubState.loaded(data)); }, (f) { _host.emitError(${camel}OnLoadState: SubState.error(f.message)); });');
       if (m == 2) buf.writeln('    event.completer?.complete(true);');
       buf.writeln('  }');
       buf.writeln();
@@ -689,10 +693,8 @@ abstract class FeatureBlocBase<T extends FeatureState> extends Bloc<FeatureEvent
   final FeatureUseCases featureUseCases;
   final String screenId;
 
-  Future<void> dispatchWithCompleter<E extends FeatureEvent>(E event) {
-    final c = Completer<void>();
+  Future<void> dispatchWithCompleter<E extends FeatureEvent>(E event) async {
     add(event);
-    return c.future;
   }
 
   void registerFeatureEventHandlers() {}
@@ -720,160 +722,143 @@ $contracts {
   }
 
   String _featureBloc() {
-    final mixinLines = units.map((u) {
-      if (nonGenericMixins.contains(u)) return mixinClassName(u);
-      return '${mixinClassName(u)}<T>';
-    }).toList();
-    final withClause = joinIndented(mixinLines);
+    final capFields = units.map((u) {
+      return '  late final ${capabilityClassName(u)}<T> ${toCamel(u)}Capability;';
+    }).join('\n');
 
-    final registrations = units.map((u) => '    register${toPascal(u)}MixinHandlers();').join('\n');
+    final capList = units.map((u) {
+      return '      ${toCamel(u)}Capability = ${capabilityClassName(u)}<T>(this),';
+    }).join('\n');
+
+    final emitFields = units.map((u) {
+      final camel = toCamel(u);
+      return '    SubState<${toPascal(u)}Ent>? ${camel}OnLoadState,';
+    }).join('\n');
+
+    final copyFields = units.map((u) {
+      final camel = toCamel(u);
+      return '        ${camel}OnLoadState: ${camel}OnLoadState ?? state.stateProps.${camel}OnLoadState,';
+    }).join('\n');
+
+    final statePropsDelegates = units.map((u) {
+      final camel = toCamel(u);
+      return '  @override\n  SubState<${toPascal(u)}Ent>? get ${camel}OnLoadState => ${camel}Capability.${camel}OnLoadState;';
+    }).join('\n\n');
+
+    final methodDelegates = units.map((u) {
+      final buf = StringBuffer();
+      for (var m = 0; m < config.methods; m++) {
+        if (m == 0) {
+          buf.writeln('  @override\n  Future<void> load${toPascal(u)}Screen({String? docSrl, bool force = false}) =>\n      ${toCamel(u)}Capability.load${toPascal(u)}Screen(docSrl: docSrl, force: force);');
+        } else if (m == 1) {
+          buf.writeln('  @override\n  Future<void> submit${toPascal(u)}({int payload = 0, Map<String, dynamic>? currentPk}) =>\n      ${toCamel(u)}Capability.submit${toPascal(u)}(payload: payload, currentPk: currentPk);');
+        } else if (m == 2) {
+          buf.writeln('  @override\n  Future<bool> refresh${toPascal(u)}({int pgNo = 1, int pgSz = 20}) =>\n      ${toCamel(u)}Capability.refresh${toPascal(u)}(pgNo: pgNo, pgSz: pgSz);');
+        } else if (m == 3) {
+          buf.writeln('  @override\n  void reset${toPascal(u)}() =>\n      ${toCamel(u)}Capability.reset${toPascal(u)}();');
+        } else {
+          buf.writeln('  @override\n  Future<void> execute${toPascal(u)}Op$m({Map<String, dynamic>? params}) =>\n      ${toCamel(u)}Capability.execute${toPascal(u)}Op$m(params: params);');
+        }
+      }
+      return buf.toString();
+    }).join('\n');
 
     return '''
+import 'package:erp_scale_sim/core/src/common_app_export.dart';
 import 'feature_bloc_base.dart';
 import 'feature_contract_bloc.dart';
+import 'feature_capability.dart';
 import '../state/feature_state.dart';
-${units.map((u) => "import '../${mixinDir(u)}/${u}_mixin.dart';").join('\n')}
+${units.map((u) => "import '../../../domain/entities/${u}_ent.dart';").join('\n')}
+${units.map((u) => "import '../capabilities/${u}_capability.dart';").join('\n')}
 
 class FeatureBloc<T extends FeatureState> extends FeatureBlocBase<T>
-    with
-$withClause
     implements IFeatureBloc<T> {
   FeatureBloc({
     required super.featureUseCases,
     required super.screenId,
     required T initialState,
   }) : super(initialState) {
+    _initCapabilities();
     registerFeatureEventHandlers();
   }
 
-  @override
-  void registerFeatureEventHandlers() {
-    super.registerFeatureEventHandlers();
-$registrations
-  }
-}
-''';
-  }
+$capFields
 
-  String _featureStore() {
-    final emitFields = units.map((u) {
-      final camel = toCamel(u);
-      return '    SubState<${toPascal(u)}Ent>? ${camel}OnLoadState,';
-    }).join('\n');
-    final copyFields = units.map((u) {
-      final camel = toCamel(u);
-      return '          ${camel}OnLoadState: ${camel}OnLoadState ?? state.stateProps.${camel}OnLoadState,';
-    }).join('\n');
+  late final Map<Type, FeatureCapability<T>> _capabilityTypeMap;
+  late final Map<String, FeatureCapability<T>> _capabilityIdMap;
 
-    return '''
-import 'package:erp_scale_sim/core/src/common_app_export.dart';
-import '../state/feature_state.dart';
-import '../../../domain/use_cases/feature_use_cases.dart';
-import '../events/feature_event.dart';
-${units.map((u) => "import '../../../domain/entities/${u}_ent.dart';").join('\n')}
-
-class FeatureStore {
-  FeatureStore({
-    required this.featureUseCases,
-    required this.screenId,
-    required FeatureState initialState,
-    required this.emitter,
-  }) : _state = initialState;
-
-  final FeatureUseCases featureUseCases;
-  final String screenId;
-  FeatureState _state;
-  void Function(FeatureState) emitter;
-
-  FeatureState get state => _state;
-
-  void add(FeatureEvent event) => emitter(_state);
-
-  Future<void> dispatch(FeatureEvent event) async {
-    add(event);
-  }
-
-  void emitLoading({$emitFields}) {
-    _state = _state.copyWith(
-      loaderStatus: LoaderStatus.loading,
-      stateProps: _state.stateProps.copyWith(
-$copyFields
-      ),
-    );
-    emitter(_state);
-  }
-
-  void emitLoaded({$emitFields}) {
-    _state = _state.copyWith(
-      loaderStatus: LoaderStatus.loaded,
-      stateProps: _state.stateProps.copyWith(
-$copyFields
-      ),
-    );
-    emitter(_state);
-  }
-
-  void emitError({$emitFields}) {
-    _state = _state.copyWith(
-      loaderStatus: LoaderStatus.error,
-      stateProps: _state.stateProps.copyWith(
-$copyFields
-      ),
-    );
-    emitter(_state);
-  }
-
-  void safeFold<T>(Either<Failure, T> result, void Function(T) onSuccess, void Function(Failure) onFailure) {
-    result.fold(onFailure, onSuccess);
-  }
-}
-''';
-  }
-
-  String _featureController() {
-    final caps = units.map((u) => '      ${capabilityClassName(u)}(_store),').join('\n');
-
-    return '''
-import 'feature_bloc_base.dart';
-import 'feature_capability.dart';
-import 'feature_store.dart';
-import '../state/feature_state.dart';
-${units.map((u) => "import '../capabilities/${u}_capability.dart';").join('\n')}
-
-class FeatureController extends FeatureBlocBase<FeatureState> {
-  FeatureController({
-    required super.featureUseCases,
-    required super.screenId,
-    required FeatureState initialState,
-  }) : _store = FeatureStore(
-          featureUseCases: featureUseCases,
-          screenId: screenId,
-          initialState: initialState,
-          emitter: (s) {},
-        ),
-        _capabilities = [],
-        super(initialState) {
-    _store.emitter = _emitState;
-    _capabilities.addAll([
-$caps
-    ]);
-    for (final cap in _capabilities) {
+  void _initCapabilities() {
+    final allCaps = <FeatureCapability<T>>[
+$capList
+    ];
+    _capabilityTypeMap = {
+      for (final cap in allCaps) cap.runtimeType: cap,
+    };
+    _capabilityIdMap = {
+      for (final cap in allCaps) cap.unitId: cap,
+    };
+    for (final cap in allCaps) {
       cap.registerHandlers(this);
     }
   }
 
-  late final FeatureStore _store;
-  late final List<FeatureCapability> _capabilities;
-
-  void _emitState(FeatureState state) {
-    // ignore: invalid_use_of_visible_for_testing_member
-    emit(state);
+  /// Type-safe dynamic capability lookup:
+  C getCapability<C extends FeatureCapability<T>>() {
+    final cap = _capabilityTypeMap[C];
+    if (cap == null) throw StateError('Capability not found for type: \$C');
+    return cap as C;
   }
 
-${units.map((u) => '  ${capabilityClassName(u)} get ${toCamel(u)}Capability => _capabilities[${units.indexOf(u)}] as ${capabilityClassName(u)};').join('\n')}
+  /// Lookup capability by string ID:
+  FeatureCapability<T>? findCapabilityById(String unitId) => _capabilityIdMap[unitId];
 
-  @override
-  void registerFeatureEventHandlers() {}
+  // Full BloC state emission operations:
+  void emitLoading({
+$emitFields
+  }) {
+    // ignore: invalid_use_of_visible_for_testing_member
+    emit(state.copyWith(
+      loaderStatus: LoaderStatus.loading,
+      stateProps: state.stateProps.copyWith(
+$copyFields
+      ),
+    ) as T);
+  }
+
+  void emitLoaded({
+$emitFields
+  }) {
+    // ignore: invalid_use_of_visible_for_testing_member
+    emit(state.copyWith(
+      loaderStatus: LoaderStatus.loaded,
+      stateProps: state.stateProps.copyWith(
+$copyFields
+      ),
+    ) as T);
+  }
+
+  void emitError({
+$emitFields
+  }) {
+    // ignore: invalid_use_of_visible_for_testing_member
+    emit(state.copyWith(
+      loaderStatus: LoaderStatus.error,
+      stateProps: state.stateProps.copyWith(
+$copyFields
+      ),
+    ) as T);
+  }
+
+  void safeFold<R>(Either<Failure, R> result, void Function(R) onSuccess, void Function(Failure) onFailure) {
+    result.fold(onFailure, onSuccess);
+  }
+
+  // --- Contract State Delegations ---
+$statePropsDelegates
+
+  // --- Contract Method Delegations ---
+$methodDelegates
 }
 ''';
   }
@@ -1004,15 +989,13 @@ class FeatureGrid extends StatelessWidget {
   }
 
   void _generateBarrelExports() {
-    final controllerExport = config.isComposition
-        ? "export 'presentation/controllers/bloc/feature_controller.dart';"
-        : "export 'presentation/controllers/bloc/feature_bloc.dart';";
     _write('lib/features/common_feature/common_feature.dart', '''
 export 'domain/use_cases/feature_use_cases.dart';
 export 'domain/entities/load_scr_ent.dart';
 export 'data/datasources/feature_remote_data_source.dart';
 export 'data/repos/feature_repo.dart';
-$controllerExport
+export 'presentation/controllers/bloc/feature_bloc.dart';
+export 'presentation/controllers/bloc/feature_capability.dart';
 export 'presentation/controllers/state/feature_state.dart';
 export 'injection/common_feature_injection.dart';
 ''');

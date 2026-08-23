@@ -162,9 +162,10 @@ class Module${moduleId}Event$index extends FeatureEvent {
   String _moduleBloc(String moduleId, String blocName, String contractName) {
     if (config.isComposition) {
       return '''
-import 'package:erp_scale_sim/features/common_feature/presentation/controllers/bloc/feature_controller.dart';
+import 'package:erp_scale_sim/features/common_feature/presentation/controllers/bloc/feature_bloc.dart';
+import 'package:erp_scale_sim/features/common_feature/presentation/controllers/state/feature_state.dart';
 
-abstract class $blocName extends FeatureController {
+abstract class $blocName<T extends FeatureState> extends FeatureBloc<T> {
   $blocName({
     required super.featureUseCases,
     required super.screenId,
@@ -302,12 +303,12 @@ import 'package:erp_scale_sim/features/common_feature/presentation/controllers/s
 import 'package:erp_scale_sim/features/common_feature/domain/use_cases/feature_use_cases.dart';
 import 'package:module_$moduleId/src/common/presentation/controllers/bloc/module_${moduleId}_bloc.dart';
 
-class $blocClass extends Module${moduleId}Bloc {
+class $blocClass extends Module${moduleId}Bloc<FeatureState> {
   $blocClass()
       : super(
           featureUseCases: ScreenCaller.getService<FeatureUseCases>(),
           screenId: 'screen_$screenId',
-          initialState: FeatureState(screenId: 'screen_$screenId'),
+          initialState: const FeatureState(screenId: 'screen_$screenId'),
         ) {
     CommonFeatureInjection.register();
   }
