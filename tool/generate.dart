@@ -3,6 +3,9 @@
 ///
 /// Usage:
 ///   dart run tool/generate.dart --arch=mixin --modules=15 --screens=800 --mixins=29
+/// dart run tool/generate.dart --arch=composition --modules=15 --screens=800 --mixins=29
+///  dart run tool/generate.dart --arch=mixin-shared --modules=15 --screens=800 --mixins=29
+
 library;
 
 import 'dart:io';
