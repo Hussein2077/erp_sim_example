@@ -1,5 +1,4 @@
 import 'config.dart';
-import 'templates.dart';
 import 'utils.dart';
 
 class ModuleGenerator {
@@ -53,6 +52,11 @@ dependencies:
   flutter_bloc: ^9.1.0
   equatable: ^2.0.7
   get_it: ^8.0.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
 
 flutter:
   uses-material-design: true
@@ -143,9 +147,9 @@ mixin Module${moduleId}Mixin$index<T extends FeatureState> on FeatureBloc<T>
 
   String _moduleEvent(String moduleId, int index) {
     return '''
-import 'package:equatable/equatable.dart';
+import 'package:erp_scale_sim/features/common_feature/presentation/controllers/events/feature_event.dart';
 
-class Module${moduleId}Event$index extends Equatable {
+class Module${moduleId}Event$index extends FeatureEvent {
   const Module${moduleId}Event$index({this.payload = 0});
   final int payload;
 
@@ -158,7 +162,6 @@ class Module${moduleId}Event$index extends Equatable {
   String _moduleBloc(String moduleId, String blocName, String contractName) {
     if (config.isComposition) {
       return '''
-import 'package:erp_scale_sim/core/src/common_app_export.dart';
 import 'package:erp_scale_sim/features/common_feature/presentation/controllers/bloc/feature_controller.dart';
 
 abstract class $blocName extends FeatureController {
@@ -182,9 +185,7 @@ abstract class $blocName extends FeatureController {
     ).join('\n');
 
     return '''
-import 'package:erp_scale_sim/core/src/common_app_export.dart';
 import 'package:erp_scale_sim/features/common_feature/presentation/controllers/bloc/feature_bloc.dart';
-import 'package:erp_scale_sim/features/common_feature/domain/use_cases/feature_use_cases.dart';
 import 'package:erp_scale_sim/features/common_feature/presentation/controllers/state/feature_state.dart';
 import 'module_${moduleId}_contract_bloc.dart';
 ${List.generate(config.moduleMixins, (i) => "import '../mixins/module_${moduleId}_mixin_$i.dart';").join('\n')}
@@ -194,14 +195,10 @@ abstract class $blocName<T extends FeatureState> extends FeatureBloc<T>
 $withClause
     implements $contractName<T> {
   $blocName({
-    required FeatureUseCases featureUseCases,
-    required String screenId,
-    required T initialState,
-  }) : super(
-          featureUseCases: featureUseCases,
-          screenId: screenId,
-          initialState: initialState,
-        ) {
+    required super.featureUseCases,
+    required super.screenId,
+    required super.initialState,
+  }) {
     registerModule${moduleId}Handlers();
   }
 
@@ -269,7 +266,7 @@ $contracts {}
   String _screenState(String screenId, String stateType) {
     if (stateType == 'FeatureState') return '';
     return '''
-import 'package:erp_scale_sim/core/src/common_app_export.dart';
+import 'package:erp_scale_sim/core/types/loader_status.dart';
 import 'package:erp_scale_sim/features/common_feature/presentation/controllers/state/feature_state.dart';
 import 'package:erp_scale_sim/features/common_feature/presentation/controllers/state/feature_state_props.dart';
 
@@ -299,7 +296,7 @@ class Screen${screenId}State extends FeatureState {
   String _screenBloc(String moduleId, String screenId, String moduleBloc, String blocClass, String stateType) {
     if (config.isComposition) {
       return '''
-import 'package:erp_scale_sim/core/src/common_app_export.dart';
+import 'package:erp_scale_sim/core/contracts/screens/screen_caller.dart';
 import 'package:erp_scale_sim/features/common_feature/injection/common_feature_injection.dart';
 import 'package:erp_scale_sim/features/common_feature/presentation/controllers/state/feature_state.dart';
 import 'package:erp_scale_sim/features/common_feature/domain/use_cases/feature_use_cases.dart';
@@ -323,11 +320,11 @@ class $blocClass extends Module${moduleId}Bloc {
         : "import 'state/screen_${screenId}_state.dart';";
 
     final initialState = stateType == 'FeatureState'
-        ? 'FeatureState(screenId: \'screen_$screenId\')'
-        : 'Screen${screenId}State(screenId: \'screen_$screenId\')';
+        ? 'const FeatureState(screenId: \'screen_$screenId\')'
+        : 'const Screen${screenId}State(screenId: \'screen_$screenId\')';
 
     return '''
-import 'package:erp_scale_sim/core/src/common_app_export.dart';
+import 'package:erp_scale_sim/core/contracts/screens/screen_caller.dart';
 import 'package:erp_scale_sim/features/common_feature/injection/common_feature_injection.dart';
 import 'package:erp_scale_sim/features/common_feature/domain/use_cases/feature_use_cases.dart';
 import 'package:module_$moduleId/src/common/presentation/controllers/bloc/module_${moduleId}_bloc.dart';
@@ -353,8 +350,8 @@ class $blocClass extends Module${moduleId}Bloc<$stateType> {
 
   String _screenDef(String pkg, String moduleId, String screenId, String blocClass) {
     return '''
-import 'package:erp_scale_sim/core/src/common_app_export.dart';
-import 'package:erp_scale_sim/features/common_feature/presentation/template/common_feature_view.dart';
+import 'package:erp_scale_sim/core/contracts/screens/screen_definition.dart';
+import 'package:flutter/widgets.dart';
 import '../controllers/bloc/screen_${screenId}_bloc.dart';
 import '../view/screen_${screenId}_view.dart';
 
@@ -412,7 +409,7 @@ $fields
 
   String _moduleInitGetIt(String moduleId, String prefix, List<int> screenIds) {
     return '''
-import 'package:erp_scale_sim/core/src/common_app_export.dart';
+import 'package:erp_scale_sim/core/contracts/modules/module_registry.dart';
 import '../../screens.dart';
 
 class M${moduleId}InitGetIt {
@@ -436,7 +433,7 @@ class M${moduleId}InitGetIt {
         .join('\n');
 
     return '''
-import 'package:erp_scale_sim/core/src/common_app_export.dart';
+import 'package:erp_scale_sim/core/contracts/screens/screen_registry.dart';
 $imports
 
 void registerModule${moduleId}Screens() {

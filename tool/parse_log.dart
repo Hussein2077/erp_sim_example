@@ -1,9 +1,10 @@
 import 'dart:io';
 
-void main() {
-  final file = File(r'C:\Users\Ultimate\.gemini\antigravity\brain\37cda67c-41dc-41b2-9684-e52672dbbdfa\.system_generated\tasks\task-139.log');
+void main(List<String> args) {
+  final filePath = args.isNotEmpty ? args[0] : 'analyze_output.txt';
+  final file = File(filePath);
   if (!file.existsSync()) {
-    print('task-139.log does not exist');
+    stdout.writeln('Log file $filePath does not exist');
     return;
   }
 
@@ -32,7 +33,7 @@ void main() {
         if (!samples.containsKey(code)) {
           samples[code] = '$message | AT: $loc';
         }
-        final fileParts = loc.split('\\');
+        final fileParts = loc.contains('/') ? loc.split('/') : loc.split('\\');
         final topFolder = fileParts.length > 1 ? fileParts[0] : loc;
         errorsByFile[topFolder] = (errorsByFile[topFolder] ?? 0) + 1;
       } else if (severity == 'warning') {
@@ -43,29 +44,29 @@ void main() {
     }
   }
 
-  print('TOTAL ERRORS: $totalErrors');
-  print('=== SUMMARY OF ERRORS ===');
+  stdout.writeln('TOTAL ERRORS: $totalErrors');
+  stdout.writeln('=== SUMMARY OF ERRORS ===');
   var sortedErrors = errorsByCode.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
   for (var entry in sortedErrors) {
-    print('ERROR CODE [${entry.key}]: ${entry.value} occurrences');
-    print('   Sample: ${samples[entry.key]}');
+    stdout.writeln('ERROR CODE [${entry.key}]: ${entry.value} occurrences');
+    stdout.writeln('   Sample: ${samples[entry.key]}');
   }
 
-  print('\n=== ERRORS BY TOP FOLDER / MODULE ===');
+  stdout.writeln('\n=== ERRORS BY TOP FOLDER / MODULE ===');
   var sortedFiles = errorsByFile.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
   for (var entry in sortedFiles) {
-    print('${entry.key}: ${entry.value} errors');
+    stdout.writeln('${entry.key}: ${entry.value} errors');
   }
 
-  print('\n=== SUMMARY OF WARNINGS ===');
+  stdout.writeln('\n=== SUMMARY OF WARNINGS ===');
   var sortedWarnings = warningsByCode.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
   for (var entry in sortedWarnings) {
-    print('WARNING CODE [${entry.key}]: ${entry.value} occurrences');
+    stdout.writeln('WARNING CODE [${entry.key}]: ${entry.value} occurrences');
   }
 
-  print('\n=== SUMMARY OF INFOS ===');
+  stdout.writeln('\n=== SUMMARY OF INFOS ===');
   var sortedInfos = infosByCode.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
   for (var entry in sortedInfos) {
-    print('INFO CODE [${entry.key}]: ${entry.value} occurrences');
+    stdout.writeln('INFO CODE [${entry.key}]: ${entry.value} occurrences');
   }
 }

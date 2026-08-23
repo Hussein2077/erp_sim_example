@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'config.dart';
 import 'templates.dart';
 import 'utils.dart';
@@ -224,7 +222,6 @@ class ScreenRegistry {
 
     _write('lib/core/contracts/screens/screen_caller.dart', '''
 import '../../injection/inject_helper.dart';
-import 'screen_definition.dart';
 import 'screen_registry.dart';
 
 class ScreenCaller {
@@ -315,7 +312,6 @@ class LinkKeyRegistry {
 
     _write('lib/core/contracts/link_keys/link_key_caller.dart', '''
 import 'link_key_definition.dart';
-import 'link_key_registry.dart';
 
 class LinkKeyCaller {
   static final Map<String, LinkKeyDefinition> _keys = {};
@@ -387,7 +383,7 @@ export 'package:reactive_forms/reactive_forms.dart';
     // Events
     for (final unit in units) {
       _write(
-        'lib/features/common_feature/presentation/controllers/events/${eventDir(unit).split('/').last}/$unit\_event.dart',
+        'lib/features/common_feature/presentation/controllers/events/${eventDir(unit).split('/').last}/${unit}_event.dart',
         generateEventFile(config, unit),
       );
     }
@@ -402,22 +398,28 @@ abstract class FeatureEvent extends Equatable {
 }
 ''');
 
+    // Contracts
+    for (final unit in units) {
+      _write(
+        'lib/features/common_feature/presentation/controllers/contracts/${unit}_contract.dart',
+        generateContractFile(config, unit),
+      );
+    }
+
     // Entities + use cases
     for (final unit in units) {
       _write(
-        'lib/features/common_feature/domain/entities/$unit\_ent.dart',
+        'lib/features/common_feature/domain/entities/${unit}_ent.dart',
         generateEntityFile(unit),
       );
       _write(
-        'lib/features/common_feature/domain/use_cases/$unit\_use_case.dart',
+        'lib/features/common_feature/domain/use_cases/${unit}_use_case.dart',
         generateUseCaseFile(unit),
       );
     }
 
     _write('lib/features/common_feature/domain/use_cases/feature_use_cases.dart', '''
-import 'package:erp_scale_sim/core/src/common_app_export.dart';
-${units.map((u) => "import '$u\_use_case.dart';").join('\n')}
-${units.map((u) => "import '../entities/$u\_ent.dart';").join('\n')}
+${units.map((u) => "import '${u}_use_case.dart';").join('\n')}
 
 class FeatureUseCases {
   FeatureUseCases({
@@ -445,10 +447,10 @@ ${units.map((u) => '  final ${useCaseClassName(u)} ${toCamel(u)}UseCase;').join(
     // Bloc base chain
     _write('lib/features/common_feature/presentation/controllers/bloc/feature_bloc_base.dart', _featureBlocBase());
     _write('lib/features/common_feature/presentation/controllers/bloc/feature_contract_bloc.dart', _featureContractBloc());
-    _write('lib/features/common_feature/presentation/controllers/bloc/feature_bloc.dart', _featureBloc());
-
     if (config.isComposition) {
       _generateComposition();
+    } else {
+      _write('lib/features/common_feature/presentation/controllers/bloc/feature_bloc.dart', _featureBloc());
     }
 
     // Data layer
@@ -487,6 +489,8 @@ abstract class FeatureContract {
     _write('lib/features/common_feature/presentation/controllers/bloc/feature_store.dart', _featureStore());
     _write('lib/features/common_feature/presentation/controllers/bloc/feature_controller.dart', _featureController());
     _write('lib/features/common_feature/presentation/controllers/bloc/feature_capability.dart', '''
+import 'feature_controller.dart';
+
 abstract class FeatureCapability {
   String get unitId;
   void registerHandlers(FeatureController controller);
@@ -495,7 +499,7 @@ abstract class FeatureCapability {
 
     for (final unit in units) {
       _write(
-        'lib/features/common_feature/presentation/controllers/capabilities/$unit\_capability.dart',
+        'lib/features/common_feature/presentation/controllers/capabilities/${unit}_capability.dart',
         _generateCapability(config, unit),
       );
     }
@@ -506,7 +510,6 @@ abstract class FeatureCapability {
     final contract = mixinContractName(unit);
     final stateCls = mixinStateClass(unit);
     final eventCls = eventClassName(unit);
-    final useCase = useCaseClassName(unit);
     final camel = toCamel(unit);
 
     final buf = StringBuffer();
@@ -514,8 +517,19 @@ abstract class FeatureCapability {
     buf.writeln("import '../bloc/feature_capability.dart';");
     buf.writeln("import '../bloc/feature_controller.dart';");
     buf.writeln("import '../bloc/feature_store.dart';");
-    buf.writeln("import '../mixins/${mixinDir(unit).split('/').last}/$unit\_mixin.dart';");
-    buf.writeln("import '../events/${eventDir(unit).split('/').last}/$unit\_event.dart';");
+    buf.writeln("import '../contracts/${unit}_contract.dart';");
+    buf.writeln("import '../../../domain/entities/${unit}_ent.dart';");
+    buf.writeln("import '../../../domain/use_cases/${unit}_use_case.dart';");
+    buf.writeln("import '../events/${eventDir(unit).split('/').last}/${unit}_event.dart';");
+    buf.writeln();
+    buf.writeln('class $stateCls {');
+    buf.writeln('  int loadCount = 0;');
+    buf.writeln('  int submitCount = 0;');
+    buf.writeln('  final Map<String, dynamic> cache = {};');
+    buf.writeln('  final Set<String> pendingKeys = {};');
+    buf.writeln('  Completer<void>? inFlight;');
+    buf.writeln('  ScrMode mode = ScrMode.view;');
+    buf.writeln('}');
     buf.writeln();
     buf.writeln('class $cap implements FeatureCapability, $contract {');
     buf.writeln('  $cap(this._store);');
@@ -530,14 +544,17 @@ abstract class FeatureCapability {
     buf.writeln('      switch (event) {');
     for (var m = 0; m < config.methods; m++) {
       final opName = m == 0 ? 'Load' : m == 1 ? 'Submit' : m == 2 ? 'Refresh' : m == 3 ? 'Reset' : 'Op$m';
-      buf.writeln("        case ${toPascal(unit)}${opName}Event(): await _handle$opName(event);");
+      buf.writeln('        case ${toPascal(unit)}${opName}Event():');
+      buf.writeln('          await _handle$opName(event);');
     }
     buf.writeln('      }');
     buf.writeln('    });');
     buf.writeln('  }');
     buf.writeln();
 
+    buf.writeln('  @override');
     buf.writeln('  SubState<${toPascal(unit)}Ent>? get ${camel}OnLoadState => _store.state.stateProps.${camel}OnLoadState;');
+    buf.writeln();
 
     for (var m = 0; m < config.methods; m++) {
       if (m == 0) {
@@ -558,8 +575,8 @@ abstract class FeatureCapability {
       final opName = m == 0 ? 'Load' : m == 1 ? 'Submit' : m == 2 ? 'Refresh' : m == 3 ? 'Reset' : 'Op$m';
       buf.writeln('  Future<void> _handle$opName(${toPascal(unit)}${opName}Event event) async {');
       buf.writeln('    _state.loadCount++;');
-      buf.writeln('    _store.emitLoading(${camel}OnLoadState: SubState.loading());');
-      buf.writeln('    final result = await _store.featureUseCases.$useCase.call(${toPascal(unit)}Params(screenId: _store.screenId, payload: event.hashCode));');
+      buf.writeln('    _store.emitLoading(${camel}OnLoadState: const SubState.loading());');
+      buf.writeln('    final result = await _store.featureUseCases.${camel}UseCase.call(${toPascal(unit)}Params(screenId: _store.screenId, payload: event.hashCode));');
       buf.writeln('    _store.safeFold(result, (data) { _state.cache[\'$unit\'] = data.toJson(); _store.emitLoaded(${camel}OnLoadState: SubState.loaded(data)); }, (f) { _store.emitError(${camel}OnLoadState: SubState.error(f.message)); });');
       if (m == 2) buf.writeln('    event.completer?.complete(true);');
       buf.writeln('  }');
@@ -567,8 +584,13 @@ abstract class FeatureCapability {
     }
 
     for (var p = 0; p < 12; p++) {
-      buf.writeln('  bool _${camel}Check$p() => _state.mode == ScrMode.view;');
+      buf.writeln('  bool _${camel}Check$p(ScrMode mode) => _state.mode == mode;');
     }
+    buf.writeln();
+    buf.writeln('  bool check${toPascal(unit)}Mode(ScrMode mode) =>');
+    final checkLines = List.generate(12, (p) => '      _${camel}Check$p(mode)').join(' ||\n');
+    buf.writeln('$checkLines;');
+
     buf.writeln('}');
     return buf.toString();
   }
@@ -594,7 +616,7 @@ abstract class FeatureCapability {
     return '''
 import 'package:equatable/equatable.dart';
 import 'package:erp_scale_sim/core/shared_cubits/sub_state.dart';
-${units.map((u) => "import '../../../domain/entities/$u\_ent.dart';").join('\n')}
+${units.map((u) => "import '../../../domain/entities/${u}_ent.dart';").join('\n')}
 
 class FeatureStateProps extends Equatable {
   const FeatureStateProps({
@@ -686,7 +708,7 @@ abstract class FeatureBlocBase<T extends FeatureState> extends Bloc<FeatureEvent
     return '''
 import '../../../domain/use_cases/feature_use_cases.dart';
 import '../state/feature_state.dart';
-${units.map((u) => "import '../${mixinDir(u)}/${u}_mixin.dart';").join('\n')}
+${units.map((u) => "import '../contracts/${u}_contract.dart';").join('\n')}
 
 abstract class IFeatureBloc<T extends FeatureState> implements
 $contracts {
@@ -707,11 +729,9 @@ $contracts {
     final registrations = units.map((u) => '    register${toPascal(u)}MixinHandlers();').join('\n');
 
     return '''
-import 'package:erp_scale_sim/core/src/common_app_export.dart';
 import 'feature_bloc_base.dart';
 import 'feature_contract_bloc.dart';
 import '../state/feature_state.dart';
-import '../../../domain/use_cases/feature_use_cases.dart';
 ${units.map((u) => "import '../${mixinDir(u)}/${u}_mixin.dart';").join('\n')}
 
 class FeatureBloc<T extends FeatureState> extends FeatureBlocBase<T>
@@ -719,10 +739,10 @@ class FeatureBloc<T extends FeatureState> extends FeatureBlocBase<T>
 $withClause
     implements IFeatureBloc<T> {
   FeatureBloc({
-    required FeatureUseCases featureUseCases,
-    required String screenId,
+    required super.featureUseCases,
+    required super.screenId,
     required T initialState,
-  }) : super(initialState, featureUseCases: featureUseCases, screenId: screenId) {
+  }) : super(initialState) {
     registerFeatureEventHandlers();
   }
 
@@ -749,6 +769,8 @@ $registrations
 import 'package:erp_scale_sim/core/src/common_app_export.dart';
 import '../state/feature_state.dart';
 import '../../../domain/use_cases/feature_use_cases.dart';
+import '../events/feature_event.dart';
+${units.map((u) => "import '../../../domain/entities/${u}_ent.dart';").join('\n')}
 
 class FeatureStore {
   FeatureStore({
@@ -812,18 +834,16 @@ $copyFields
     final caps = units.map((u) => '      ${capabilityClassName(u)}(_store),').join('\n');
 
     return '''
-import 'package:erp_scale_sim/core/src/common_app_export.dart';
 import 'feature_bloc_base.dart';
 import 'feature_capability.dart';
 import 'feature_store.dart';
 import '../state/feature_state.dart';
-import '../../../domain/use_cases/feature_use_cases.dart';
-${units.map((u) => "import '../capabilities/$u\_capability.dart';").join('\n')}
+${units.map((u) => "import '../capabilities/${u}_capability.dart';").join('\n')}
 
 class FeatureController extends FeatureBlocBase<FeatureState> {
   FeatureController({
-    required FeatureUseCases featureUseCases,
-    required String screenId,
+    required super.featureUseCases,
+    required super.screenId,
     required FeatureState initialState,
   }) : _store = FeatureStore(
           featureUseCases: featureUseCases,
@@ -832,8 +852,8 @@ class FeatureController extends FeatureBlocBase<FeatureState> {
           emitter: (s) {},
         ),
         _capabilities = [],
-        super(initialState, featureUseCases: featureUseCases, screenId: screenId) {
-    _store.emitter = (s) => emit(s);
+        super(initialState) {
+    _store.emitter = _emitState;
     _capabilities.addAll([
 $caps
     ]);
@@ -844,6 +864,11 @@ $caps
 
   late final FeatureStore _store;
   late final List<FeatureCapability> _capabilities;
+
+  void _emitState(FeatureState state) {
+    // ignore: invalid_use_of_visible_for_testing_member
+    emit(state);
+  }
 
 ${units.map((u) => '  ${capabilityClassName(u)} get ${toCamel(u)}Capability => _capabilities[${units.indexOf(u)}] as ${capabilityClassName(u)};').join('\n')}
 
@@ -860,7 +885,7 @@ ${units.map((u) => '  ${capabilityClassName(u)} get ${toCamel(u)}Capability => _
     return '''
 import 'package:erp_scale_sim/core/injection/get_it.dart';
 import '../domain/use_cases/feature_use_cases.dart';
-${units.map((u) => "import '../domain/use_cases/$u\_use_case.dart';").join('\n')}
+${units.map((u) => "import '../domain/use_cases/${u}_use_case.dart';").join('\n')}
 import '../data/datasources/feature_remote_data_source.dart';
 import '../data/repos/feature_repo.dart';
 
@@ -884,8 +909,6 @@ $useCaseParams
 
   String _commonFeatureDef() {
     return '''
-import 'package:erp_scale_sim/core/src/common_app_export.dart';
-
 class CommonFeatureDef {
   static String screenTitle(String id) => 'Screen \$id';
 }
@@ -981,12 +1004,15 @@ class FeatureGrid extends StatelessWidget {
   }
 
   void _generateBarrelExports() {
+    final controllerExport = config.isComposition
+        ? "export 'presentation/controllers/bloc/feature_controller.dart';"
+        : "export 'presentation/controllers/bloc/feature_bloc.dart';";
     _write('lib/features/common_feature/common_feature.dart', '''
 export 'domain/use_cases/feature_use_cases.dart';
 export 'domain/entities/load_scr_ent.dart';
 export 'data/datasources/feature_remote_data_source.dart';
 export 'data/repos/feature_repo.dart';
-export 'presentation/controllers/bloc/feature_bloc.dart';
+$controllerExport
 export 'presentation/controllers/state/feature_state.dart';
 export 'injection/common_feature_injection.dart';
 ''');

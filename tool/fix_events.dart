@@ -1,9 +1,9 @@
 import 'dart:io';
 
 void main() {
-  final packagesDir = Directory(r'c:\Users\Ultimate\StudioProjects\erp_scale_sim\packages');
+  final packagesDir = Directory('packages');
   if (!packagesDir.existsSync()) {
-    print('packages dir does not exist');
+    stdout.writeln('packages dir does not exist');
     return;
   }
 
@@ -19,9 +19,9 @@ void main() {
         updated = updated.replaceAll('extends Equatable', 'extends FeatureEvent');
         entity.writeAsStringSync(updated);
         count++;
-        print('Updated ${entity.path}');
+        stdout.writeln('Updated ${entity.path}');
       }
     }
   }
-  print('Total event files updated: $count');
+  stdout.writeln('Total event files updated: $count');
 }

@@ -5,6 +5,8 @@
 ///   dart run tool/bench.dart --screens=800 --mode=all
 ///   dart run tool/bench.dart --screens=200,400,800 --mode=ddc
 ///   dart run tool/bench.dart --report
+library;
+
 import 'dart:io';
 
 Future<void> main(List<String> args) async {
@@ -40,7 +42,7 @@ Future<void> main(List<String> args) async {
       mode: m,
     );
     stdout.writeln('  floor $m: ${floor.compileSeconds}s compile, ${floor.pubGetSeconds}s pub get');
-    _writeLog(resultsDir, 'floor_${m}.log', floor.log);
+    _writeLog(resultsDir, 'floor_$m.log', floor.log);
   }
 
   for (final arch in archs) {
